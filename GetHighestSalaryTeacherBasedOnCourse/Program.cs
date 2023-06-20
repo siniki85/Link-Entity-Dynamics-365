@@ -1,5 +1,6 @@
 ﻿using Microsoft.Crm.Sdk.Messages;
 using Microsoft.Xrm.Sdk;
+using Microsoft.Xrm.Sdk.Messages;
 using Microsoft.Xrm.Sdk.Query;
 using Microsoft.Xrm.Tooling.Connector;
 using System;
@@ -33,8 +34,8 @@ namespace GetHighestSalaryTeacherBasedOnCourse
                         Console.WriteLine("2. Get Total Amount in Order & related Quote: ");
                         Console.WriteLine("3. Retrieve All Accounts Along With Their Associated Contacts: ");
                         Console.WriteLine("4. Get Won & Lost Opportunity Associated With Contacts: ");
-                        Console.WriteLine("5. Generate Quote From Opportunity");
-                        Console.WriteLine("6. ");
+                        Console.WriteLine("5. Generate Quote From Opportunity: ");
+                        Console.WriteLine("6. Create Order With Product Line: ");
                         Console.WriteLine("7. Exit");
 
                         string choice = Console.ReadLine();
@@ -62,6 +63,7 @@ namespace GetHighestSalaryTeacherBasedOnCourse
                                 break;
 
                             case "6":
+                                createOrderWithProduct(service);
                                 break;
 
                             case "7":
@@ -73,7 +75,6 @@ namespace GetHighestSalaryTeacherBasedOnCourse
                                 break;
                         }
                     }
-                    
                 }
                 else
                 {
@@ -301,8 +302,66 @@ namespace GetHighestSalaryTeacherBasedOnCourse
 
             Guid quoteId = quoteResponse.Entity.Id;
 
-            Console.WriteLine("Quote Created Successfully..........");
+            Console.WriteLine("Quote Created Successfully.........." + "\n ID: " + quoteId);
             Console.ReadLine();
+        }
+
+        public static void createOrderWithProduct(CrmServiceClient service)
+        {
+            Entity order = new Entity("salesorder");
+            order["name"] = "Order Testing";
+            order["customerid"] = new EntityReference("account", new Guid("7229f80f-74ff-ed11-8f6d-6045bdaa91c3"));
+            order["transactioncurrencyid"] = new EntityReference("transactioncurrency", new Guid("b6129b34-adf7-ed11-8f6e-6045bdac5098"));
+            order["pricelevelid"] = new EntityReference("pricelevel", new Guid("4a2944f7-edfe-ed11-8f6d-6045bdaa91c3"));
+
+            var orderId = service.Create(order);
+
+            if (orderId != Guid.Empty)
+            {
+                Entity orderProduct = new Entity("salesorderdetail");
+                EntityCollection collection = new EntityCollection();
+                orderProduct["salesorderid"] = new EntityReference("salesorder", orderId); // Use the same ID as the order created in the previous step
+                orderProduct["productid"] = new EntityReference("product", new Guid("a79facee-4500-ee11-8f6d-6045bdaa91c3"));
+                orderProduct["quantity"] = 1.00m;
+                orderProduct["priceperunit"] = new Money(1000.0m);
+                orderProduct["uomid"] = new EntityReference("uom", new Guid("6ba4b012-4600-ee11-8f6d-6045bdaa91c3"));
+
+                collection.Entities.Add(orderProduct);
+
+                var createRequest = new OrganizationRequestCollection();
+
+                foreach (var item in collection.Entities)
+                {
+                    var productCreate = new CreateRequest { Target = item };
+                    createRequest.Add(productCreate);
+                }
+
+                var executeMultipleRequest = new ExecuteMultipleRequest
+                {
+                    Requests = createRequest,
+                    Settings = new ExecuteMultipleSettings
+                    {
+                        ContinueOnError = false,
+                        ReturnResponses = true
+                    }
+                };
+
+                var executeMultipleResponse = (ExecuteMultipleResponse)service.Execute(executeMultipleRequest);
+
+                foreach (var item in executeMultipleResponse.Responses)
+                {
+                    if (item.Fault != null)
+                    {
+                        Console.WriteLine("Failed to create order item" + item.Fault.Message);
+                    }
+                    else if (item.Response != null && item.Response.Results.Contains("id"))
+                    {
+                        var productLineID = ((CreateResponse)item.Response).id;
+                        Console.WriteLine("Product Line Item Created with id..." + productLineID);
+                    }
+                }
+                Console.WriteLine("Successfully order & product line created....");
+            }
         }
     }
 }
